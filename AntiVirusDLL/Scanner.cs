@@ -9,9 +9,8 @@ using System.Runtime;
 
 namespace AntiVirusDLL
 {
-    class Scanner
+    public class Scanner
     {
-        public static int ObjectCounter = 0;
         public static DBContext context;
         public Queue<string> FilesToBeScanned = new Queue<string>();
         protected Queue<string> DirectoriesToBeScanned = new Queue<string>();
@@ -23,11 +22,9 @@ namespace AntiVirusDLL
         {
             context = dBContext;
             this.task = task;
-            ++ObjectCounter;
         }
-        protected Scanner(){}
 
-        public void StartScanning()
+        public virtual void StartScanning()
         {
             //Scanning directories
             IsScanning = true;
@@ -50,22 +47,12 @@ namespace AntiVirusDLL
 
             task.IsActive = false;
         }
-        public void Scan(string path)
-        {
-            if (File.GetAttributes(task.Path).HasFlag(FileAttributes.Directory)) ScanDir(task.Path);
-            else FilesToBeScanned.Enqueue(task.Path);
-
-
-            while (DirectoriesToBeScanned.Count > 0 || ArchivesToCheck.Count > 0) { }
-            IsScanning = false;
-        }
-
 
         protected void ScanZipFiles()
         {
             while (FilesToBeScanned.Count > 0 && task.IsActive)
             {
-                if(ArchivesToCheck.Count > 0)
+                if (ArchivesToCheck.Count > 0)
                 {
                     string path = ArchivesToCheck.Dequeue();
                     ScanZipFileStream(GetFileStream(path), path);
@@ -82,13 +69,14 @@ namespace AntiVirusDLL
                 //если файл оказался исполняемым, то мы мы проверяем его сигнатуру
                 if(ScanFileStream(GetFileStream(path), path)) CheckFileStream(GetFileStream(path), path);
             }
+            //IsScanning = false;
         }
 
 
 
         protected void ScanDir(string path)
         {
-            //Console.WriteLine("Scanning dir: " + path);
+            Console.WriteLine("Scanning dir: " + path);
             string[] allFiles = Directory.GetFiles(path, "*");
             string[] allDirectories = Directory.GetDirectories(path, "*");
 
@@ -108,9 +96,18 @@ namespace AntiVirusDLL
         }
         protected Stream GetFileStream(string path)
         {
-            while (FileInUse(path)) { Thread.Sleep(100); }
-            FileStream file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            return file;
+            while (true)
+            {
+                try
+                {
+                    FileStream stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+                    return stream;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(100);
+                }
+            }
         }
         protected bool ScanFileStream(Stream file, string path, bool fromArchive = false)
         {
@@ -121,6 +118,7 @@ namespace AntiVirusDLL
                     if ((char)file.ReadByte() == 'Z')
                     {
                         if (fromArchive) CheckFileStream(file, path);
+                        Console.WriteLine("Found exe: " + path);
                         result = true;
                     }
                     break;
@@ -137,6 +135,7 @@ namespace AntiVirusDLL
                     if ((char)file.ReadByte() == 'K')
                     {
                         Console.WriteLine("Zip file found at: " + path);
+                        Console.WriteLine("From Archive: " + fromArchive);
                         if (fromArchive) ScanZipFileStream(file, path);
                         else ArchivesToCheck.Enqueue(path);
                     }
@@ -147,7 +146,7 @@ namespace AntiVirusDLL
             file.Close();
             return result;
         }
-        protected void CheckFileStream(Stream stream, string path)
+        protected virtual void CheckFileStream(Stream stream, string path)
         {
             int offset = 0;
             bool malwareFound = false;
@@ -155,12 +154,14 @@ namespace AntiVirusDLL
             for (int i = 0; i < data.Length - 4 && !malwareFound; i++)
             {
                 string sign = GetStringOfBytes(data, i, 4);
-                List<VirusDTO> viruses = context.GetViruses(sign, offset + i);
-                foreach (VirusDTO virus in viruses)
+                List<VirusDataSet> viruses = context.GetViruses(sign, offset + i);
+                foreach (VirusDataSet virus in viruses)
                 {
                     if (CheckSignatureFullMatch(virus, data, i))
                     {
-                        task.MalwareFound.Add(path, virus.Name);
+                        task.VirusFound.Add(new Virus(path, virus.Name));
+                        Console.WriteLine($"Malware found!! at: {path} | name: {virus.Name} ");
+                        Console.WriteLine($"Malware Signature: {virus.Signature}");
                         malwareFound = true;
                         break;
                     }
@@ -170,7 +171,7 @@ namespace AntiVirusDLL
             if (malwareFound) switch (task.Option)
                 {
                     case TaskOption.Quarntine:
-                        MoveToQuarntine(path);
+                        MoveToQuarantine(path);
                         break;
                     case TaskOption.Delete:
                         DeleteFile(path);
@@ -179,9 +180,10 @@ namespace AntiVirusDLL
                         break;
                 }
         }
-        protected bool CheckSignatureFullMatch(VirusDTO virus, byte[] data, int offset)
+        protected bool CheckSignatureFullMatch(VirusDataSet virus, byte[] data, int offset)
         {
-            string signature = GetStringOfBytes(data, offset, virus.Signature.Length);
+            string signature = GetStringOfBytes(data, offset, virus.Signature.Length / 2);
+            //TODO && offset + virus.Signature.Length < virus.OffsetEnd
             if (signature.Equals(virus.Signature) && offset + virus.Signature.Length < virus.OffsetEnd) return true;
             return false;
         }
@@ -191,6 +193,7 @@ namespace AntiVirusDLL
         }
         protected byte[] GetFileCode(Stream stream, ref int offset)
         {
+            //.text МОЖЕТ НЕ БЫТЬ
             bool txtIsFound = false;
             while (!txtIsFound)
             {
@@ -212,12 +215,12 @@ namespace AntiVirusDLL
             stream.Read(array, 0, 4);
             Array.Reverse(array, 0, array.Length);
             int rawDataSize = BitConverter.ToInt32(array, 0);
-            //Console.WriteLine("rawDataSize = " + rawDataSize);
+            Console.WriteLine("rawDataSize = " + rawDataSize);
 
             stream.Read(array, 0, 4);
             Array.Reverse(array, 0, array.Length);
             int rawDataPosition = BitConverter.ToInt32(array, 0);
-            //Console.WriteLine("rawDataPosition = " + rawDataPosition);
+            Console.WriteLine("rawDataPosition = " + rawDataPosition);
 
             offset = rawDataPosition;
             array = new byte[rawDataSize];
@@ -231,37 +234,31 @@ namespace AntiVirusDLL
         }
         protected void ScanZipFileStream(Stream stream, string path)
         {
-            stream.Position = 0;
-            using (ZipArchive archive = new ZipArchive(stream))
+            //stream.Position = 0;
+            //stream.Seek(0, SeekOrigin.Begin);
+            //stream.flush()
+            Console.WriteLine("Try to scan zip file stream: " + path);
+            stream.Close();
+            return;
+            try
             {
-                foreach (ZipArchiveEntry entry in archive.Entries)
+                using (ZipArchive archive = new ZipArchive(stream))
                 {
-                    using (Stream reader = entry.Open())
+                    foreach (ZipArchiveEntry entry in archive.Entries)
                     {
-                        ScanFileStream(reader, path, true);
+                        using (Stream reader = entry.Open())
+                        {
+                            ScanFileStream(reader, path, true);
+                        }
                     }
                 }
             }
-        }
-        protected bool FileInUse(string path)
-        {
-            try
-            {
-                using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                {
-                    stream.Close();
-                }
-            }
-            catch (IOException)
-            {
-                return true;
-            }
-            return false;
+            catch (Exception e) { }
         }
 
 
         //TODO
-        protected void MoveToQuarntine(string path)
+        protected void MoveToQuarantine(string path)
         {
 
         }

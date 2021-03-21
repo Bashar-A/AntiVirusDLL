@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace AntiVirusDLL
 {
-    public class VirusDTO
+    public class VirusDataSet
     {
-        public VirusDTO(int id, string name, string signature, int offsetBegin, int offsetEnd)
+        public VirusDataSet(int id, string name, string signature, int offsetBegin, int offsetEnd)
         {
             Id = id;
             Name = name;

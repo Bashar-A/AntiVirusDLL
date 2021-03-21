@@ -85,9 +85,8 @@
     <Compile Include="Monitor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Scanner.cs" />
-    <Compile Include="ScannerFactory.cs" />
     <Compile Include="Task.cs" />
-    <Compile Include="VirusDTO.cs" />
+    <Compile Include="VirusDataSet.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
