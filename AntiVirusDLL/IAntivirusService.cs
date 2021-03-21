@@ -11,12 +11,27 @@ namespace AntiVirusDLL
     public interface IAntivirusService
     {
         [OperationContract]
+        void Start();
+
+        [OperationContract]
         List<Task> GetTasks();
 
         [OperationContract]
-        string Method1(string x);
+        List<Task> GetActiveTasks();
 
         [OperationContract]
-        string Method2(string x);
+        bool StopTask(Task task);
+
+        [OperationContract]
+        List<Virus> GetVirusesFound(Task task);
+
+        [OperationContract]
+        bool MoveToQuarantineVirus(Task task, Virus virus, bool MoveBack = false);
+
+        [OperationContract]
+        bool DeleteVirus(Task task, Virus virus);
+
+        [OperationContract]
+        bool AddNewTask(Task task);
     }
 }

@@ -10,8 +10,6 @@ namespace AntiVirusDLL
 {
     public class Monitor : Scanner
     {
-        static List<FileSystemWatcher> MonitoredDirectories = new List<FileSystemWatcher>();
-
         public Monitor(DBContext dBContext, ref Task task) : base(dBContext, ref task)
         {
         }
@@ -19,6 +17,7 @@ namespace AntiVirusDLL
         override public void StartScanning()
         {
             //Scanning directories
+            MonitorDir(task.Path);
             IsScanning = true;
             Thread thread1 = new Thread(ScanFiles);
             Thread thread2 = new Thread(ScanZipFiles);
@@ -26,36 +25,60 @@ namespace AntiVirusDLL
             thread2.Start();
         }
 
-        
-        public bool RemoveDir(string path)
+        override protected void ScanZipFiles()
         {
-            for (int i = MonitoredDirectories.Count - 1; i > 0; i--)
+            while (task.IsActive)
             {
-                if (MonitoredDirectories[i].Path.Equals(path))
+                if (ArchivesToCheck.Count > 0)
                 {
-                    MonitoredDirectories[i].Dispose();
-                    MonitoredDirectories.RemoveAt(i);
-                    task.IsActive = false;
-                    return true;
+                    string path = ArchivesToCheck.Dequeue();
+                    ScanZipFileStream(GetFileStream(path), path);
                 }
+                else Thread.Sleep(1000);
             }
-            return false;
+            IsScanning = false;
         }
-        public bool CheckSubDirPath(string path)
+        override protected void ScanFiles()
         {
-            foreach(FileSystemWatcher watcher in MonitoredDirectories)
+            while (task.IsActive)
             {
-                if (path.IndexOf(watcher.Path) > 0) return false;
-            }
+                if (FilesToBeScanned.Count > 0)
+                {
+                    string path = FilesToBeScanned.Dequeue();
 
-            return true;
+                    //если файл оказался исполняемым, то мы мы проверяем его сигнатуру
+                    if (ScanFileStream(GetFileStream(path), path))
+                    {
+                        CheckFileStream(GetFileStream(path), path);
+                    }
+                }
+                else Thread.Sleep(1000);
+            }
+            //IsScanning = false;
         }
+
+
+        //public bool RemoveDir(string path)
+        //{
+        //    for (int i = MonitoredDirectories.Count - 1; i > 0; i--)
+        //    {
+        //        if (MonitoredDirectories[i].Path.Equals(path))
+        //        {
+        //            MonitoredDirectories[i].Dispose();
+        //            MonitoredDirectories.RemoveAt(i);
+        //            task.IsActive = false;
+        //            return true;
+        //        }
+        //    }
+        //    return false;
+        //}
+
         public bool MonitorDir(string path)
         {
-            if (CheckSubDirPath(path)) return false;
+            //if (CheckSubDirPath(path)) return false;
             FileSystemWatcher watcher = new FileSystemWatcher(path);
-            MonitoredDirectories.Add(watcher);
-            watcher.NotifyFilter = NotifyFilters.LastWrite;
+            //MonitoredDirectories.Add(watcher);
+            watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size;
             watcher.Filter = "*";
             watcher.IncludeSubdirectories = true;
             watcher.EnableRaisingEvents = true;
@@ -69,8 +92,20 @@ namespace AntiVirusDLL
         private void OnChanged(object sender, FileSystemEventArgs e)
         {
             if (File.GetAttributes(e.FullPath).HasFlag(FileAttributes.Directory)) return;
+            List <string> files = FilesToBeScanned.ToList();
+            foreach (var item in files)
+            {
+                if (item.Equals(e.FullPath)) return;
+            }
             FilesToBeScanned.Enqueue(e.FullPath);
-            if (!IsScanning) StartScanning();
+            if (!IsScanning)
+            {
+                IsScanning = true;
+                Thread thread1 = new Thread(ScanFiles);
+                Thread thread2 = new Thread(ScanZipFiles);
+                thread1.Start();
+                thread2.Start();
+            }
             Console.WriteLine($"Changed: {e.FullPath}, Type: {e.ChangeType}");
         }
     }

@@ -40,15 +40,15 @@ namespace AntiVirusDLL
 
             while (IsScanning && task.IsActive)
             {
-                task.FilesScanned = task.FilesTotal - FilesToBeScanned.Count;
-                task.Progress = task.FilesScanned / task.FilesTotal;
+                UpdateTask();
                 Thread.Sleep(100);
             }
 
             task.IsActive = false;
+            UpdateTask();
         }
 
-        protected void ScanZipFiles()
+        protected virtual void ScanZipFiles()
         {
             while (FilesToBeScanned.Count > 0 && task.IsActive)
             {
@@ -60,14 +60,17 @@ namespace AntiVirusDLL
             }
             IsScanning = false;
         }
-        protected void ScanFiles()
+        protected virtual void ScanFiles()
         {
             while (FilesToBeScanned.Count > 0 && task.IsActive)
             {
                 string path = FilesToBeScanned.Dequeue();
 
                 //если файл оказался исполняемым, то мы мы проверяем его сигнатуру
-                if(ScanFileStream(GetFileStream(path), path)) CheckFileStream(GetFileStream(path), path);
+                if (ScanFileStream(GetFileStream(path), path))
+                {
+                    CheckFileStream(GetFileStream(path), path);
+                }
             }
             //IsScanning = false;
         }
@@ -76,7 +79,7 @@ namespace AntiVirusDLL
 
         protected void ScanDir(string path)
         {
-            Console.WriteLine("Scanning dir: " + path);
+            //Console.WriteLine("Scanning dir: " + path);
             string[] allFiles = Directory.GetFiles(path, "*");
             string[] allDirectories = Directory.GetDirectories(path, "*");
 
@@ -150,6 +153,7 @@ namespace AntiVirusDLL
         {
             int offset = 0;
             bool malwareFound = false;
+            Virus virusFound = new Virus();
             byte[] data = GetFileCode(stream, ref offset);
             for (int i = 0; i < data.Length - 4 && !malwareFound; i++)
             {
@@ -159,26 +163,31 @@ namespace AntiVirusDLL
                 {
                     if (CheckSignatureFullMatch(virus, data, i))
                     {
-                        task.VirusFound.Add(new Virus(path, virus.Name));
-                        Console.WriteLine($"Malware found!! at: {path} | name: {virus.Name} ");
-                        Console.WriteLine($"Malware Signature: {virus.Signature}");
+                        virusFound = new Virus(path, virus.Name);
+                        virusFound.InQuarantine = task.Option == TaskOption.Quarntine;
+                        DangerFound(virusFound);
                         malwareFound = true;
                         break;
                     }
                 }
             }
 
-            if (malwareFound) switch (task.Option)
+            if (malwareFound)
+            {
+                switch (task.Option)
                 {
+                    case TaskOption.Nothing:
+                        break;
                     case TaskOption.Quarntine:
-                        MoveToQuarantine(path);
+                        MoveToQuarantine(virusFound);
                         break;
                     case TaskOption.Delete:
-                        DeleteFile(path);
+                        DeleteVirus(virusFound);
                         break;
                     default:
                         break;
                 }
+            }
         }
         protected bool CheckSignatureFullMatch(VirusDataSet virus, byte[] data, int offset)
         {
@@ -215,12 +224,12 @@ namespace AntiVirusDLL
             stream.Read(array, 0, 4);
             Array.Reverse(array, 0, array.Length);
             int rawDataSize = BitConverter.ToInt32(array, 0);
-            Console.WriteLine("rawDataSize = " + rawDataSize);
+            //Console.WriteLine("rawDataSize = " + rawDataSize);
 
             stream.Read(array, 0, 4);
             Array.Reverse(array, 0, array.Length);
             int rawDataPosition = BitConverter.ToInt32(array, 0);
-            Console.WriteLine("rawDataPosition = " + rawDataPosition);
+            //Console.WriteLine("rawDataPosition = " + rawDataPosition);
 
             offset = rawDataPosition;
             array = new byte[rawDataSize];
@@ -237,9 +246,10 @@ namespace AntiVirusDLL
             //stream.Position = 0;
             //stream.Seek(0, SeekOrigin.Begin);
             //stream.flush()
-            Console.WriteLine("Try to scan zip file stream: " + path);
+            //Console.WriteLine("Try to scan zip file stream: " + path);
             stream.Close();
             return;
+            //проверить на обычный зип
             try
             {
                 using (ZipArchive archive = new ZipArchive(stream))
@@ -256,15 +266,44 @@ namespace AntiVirusDLL
             catch (Exception e) { }
         }
 
+        protected void DangerFound(Virus virus)
+        {
+            context.AddVirusFound(task, virus);
+            if (task.VirusFound == null) task.VirusFound = new List<Virus>();
+            task.VirusFound.Add(virus);
+        }
+        protected void UpdateTask()
+        {
+            task.FilesScanned = task.FilesTotal - FilesToBeScanned.Count;
+            task.Progress = (double)task.FilesScanned / task.FilesTotal;
+            context.UpdateTask(task);
+        }
 
         //TODO
-        protected void MoveToQuarantine(string path)
+        public static bool MoveToQuarantine(Virus virus, bool MoveBack = false)
         {
-
+            try
+            {
+                using (var stream = File.Open(virus.Path, FileMode.Open))
+                {
+                    stream.Position = 0;
+                    if (MoveBack) stream.WriteByte(0x4D);
+                    else stream.WriteByte(0x51);
+                    stream.Close();
+                }
+            }
+            catch (Exception) { return false; }
+            return true;
         }
-        protected void DeleteFile(string path)
+        public static bool DeleteVirus(Virus virus)
         {
 
+            try
+            {
+                File.Delete(virus.Path);
+            }
+            catch (Exception) { return false; }
+            return true;
         }
     }
 }
