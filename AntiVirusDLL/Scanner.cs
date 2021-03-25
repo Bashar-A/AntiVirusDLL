@@ -217,6 +217,7 @@ namespace AntiVirusDLL
                     default:
                         break;
                 }
+                if (stream.Position == stream.Length - 1) break;
             }
             stream.Position += 10;
 
