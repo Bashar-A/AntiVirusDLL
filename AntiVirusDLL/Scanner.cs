@@ -217,6 +217,7 @@ namespace AntiVirusDLL
                     default:
                         break;
                 }
+                if (stream.Position == stream.Length - 1) break;
             }
             stream.Position += 10;
 
@@ -279,7 +280,6 @@ namespace AntiVirusDLL
             context.UpdateTask(task);
         }
 
-        //TODO
         public static bool MoveToQuarantine(Virus virus, bool MoveBack = false)
         {
             try

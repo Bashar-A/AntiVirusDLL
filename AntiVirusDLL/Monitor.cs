@@ -57,22 +57,6 @@ namespace AntiVirusDLL
             //IsScanning = false;
         }
 
-
-        //public bool RemoveDir(string path)
-        //{
-        //    for (int i = MonitoredDirectories.Count - 1; i > 0; i--)
-        //    {
-        //        if (MonitoredDirectories[i].Path.Equals(path))
-        //        {
-        //            MonitoredDirectories[i].Dispose();
-        //            MonitoredDirectories.RemoveAt(i);
-        //            task.IsActive = false;
-        //            return true;
-        //        }
-        //    }
-        //    return false;
-        //}
-
         public bool MonitorDir(string path)
         {
             //if (CheckSubDirPath(path)) return false;

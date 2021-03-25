@@ -16,7 +16,6 @@ namespace AntiVirusDLL
             OffsetBegin = offsetBegin;
             OffsetEnd = offsetEnd;
         }
-
         public int Id { get; set; }
         public string Name { get; set; }
         public string Signature { get; set; }

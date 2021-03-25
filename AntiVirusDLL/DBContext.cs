@@ -17,25 +17,6 @@ namespace AntiVirusDLL
         private SqliteConnection GetConnection()
         {
             return new SqliteConnection("Data Source=" + source);
-            //if (connections.Count > 0)
-            //{
-            //    return connections.Dequeue();
-            //}
-            //else if(MAX_CONNECTIONS > CONNECTION_INSTANCES)
-            //{
-            //    CONNECTION_INSTANCES++;
-            //    return new SqliteConnection("Data Source=" + source);
-            //}
-            //else
-            //{
-            //    while (true)
-            //    {
-            //        if (connections.Count > 0)
-            //        {
-            //            return connections.Dequeue();
-            //        }
-            //    }
-            //}
         }
 
 

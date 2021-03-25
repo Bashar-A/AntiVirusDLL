@@ -10,8 +10,6 @@ namespace AntiVirusDLL
     public class AntivirusService : IAntivirusService
     {
         private static DBContext context = new DBContext();
-        //private static List<Scanner> scanners = new List<Scanner>();
-        //private static List<Monitor> monitors = new List<Monitor>();
         private static List<Task> activeTasks = new List<Task>();
         private static List<Task> schedualedTasks = new List<Task>();
         private static Queue<Task> newTasks = new Queue<Task>();
@@ -105,8 +103,8 @@ namespace AntiVirusDLL
             for (int i = activeTasks.Count - 1; i >= 0; i--)
             {
                 if (activeTasks[i].Id == task.Id){
-                    if (activeTasks[i].Type == TaskType.Monitor) context.UpdateTask(activeTasks[i]);
                     activeTasks[i].IsActive = false;
+                    if (activeTasks[i].Type == TaskType.Monitor) context.UpdateTask(activeTasks[i]);
                     activeTasks.RemoveAt(i);
                     return true;
                 }
